@@ -110,6 +110,8 @@ void initialize(int size, int rank, torch::Tensor& kvs_data)
     }
     
     ds_device = "xpu:" + std::to_string(rank);
+    ds_stream = init_stream(ds_device);
+    
     c10::impl::VirtualGuardImpl impl(ds_device.type());
     c10::Stream _stream = impl.getStreamFromGlobalPool(ds_device, /*isHighPriority=*/false);
 
@@ -181,6 +183,7 @@ ccl::datatype get_ccl_datatype(c10::ScalarType type)
     ccl::datatype ccl_type;
     switch (type) {
         case c10::ScalarType::Int: ccl_type = ccl::datatype::int32; break;
+        case c10::ScalarType::Long: ccl_type = ccl::datatype::int64; break;
         case c10::ScalarType::Float: ccl_type = ccl::datatype::float32; break;
         case c10::ScalarType::Double: ccl_type = ccl::datatype::float64; break;
         case c10::ScalarType::BFloat16: ccl_type = ccl::datatype::bfloat16; break;
