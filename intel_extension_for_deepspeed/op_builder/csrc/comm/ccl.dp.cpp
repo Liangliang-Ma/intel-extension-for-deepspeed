@@ -49,10 +49,22 @@ int world_size = -1;
 
 std::set<int> _comm_ids;
 std::set<int> _colors;
-ccl::vector_class<ccl::communicator> _ccl_comms;
+std::vector<ccl::communicator> _ccl_comms;
+
+// ccl::vector_class<ccl::communicator> sub_ccl_comms;
+ccl::shared_ptr_class<ccl::kvs> sub_kvs;
+std::map<std::vector<int>, int> group_to_comm_id;
 
 ccl::communicator& _get_comm_from_group() { return _ccl_comms[0]; }
 ccl::communicator& _get_comm_from_group(py::object group) { return _ccl_comms[0]; }
+ccl::communicator& _get_comm_from_group(std::vector<int> ranks) 
+{ 
+    if (group_to_comm_id.find(ranks) != group_to_comm_id.end())
+    {
+        auto id = group_to_comm_id.find(ranks);
+        return _ccl_comms[id->second];
+    }
+}
 
 #define CCLCHECK(cmd) \
     do {                                                             \
@@ -125,7 +137,7 @@ void initialize(int size, int rank, torch::Tensor& kvs_data)
 
     // Create ccl::communicators
     // auto ds_comms = ccl::create_communicators(size, devs_rank, ctx, kvs);
-    _ccl_comms.emplace_back(ccl::create_communicator(size, rank, _device, ctx, kvs));
+    _ccl_comms.push_back(ccl::create_communicator(size, rank, _device, ctx, kvs));
 }
 
 /*
@@ -176,6 +188,42 @@ py::object new_group(std::vector<int> ranks)
     int color = next_unique_val(_colors);
     std::cout << "RANK: " << get_rank() << " COMM_ID: " << comm_id << " COLOR: " << color
               << std::endl;
+}
+
+
+
+std::vector<uint8_t> get_sub_kvs_addr(bool first)
+{
+    if (first) {
+        sub_kvs = ccl::create_main_kvs();
+        ccl::kvs::address_type main_addr = sub_kvs->get_address();
+        auto ccl_kvs_addr = std::vector<uint8_t>(main_addr.begin(), main_addr.end());
+        return ccl_kvs_addr;
+    } else {
+        ccl::kvs::address_type main_addr;
+        auto ccl_kvs_addr = std::vector<uint8_t>(main_addr.begin(), main_addr.end());
+        return ccl_kvs_addr;
+    }
+}
+
+void initialize_sub_comm(int size, int rank, torch::Tensor& kvs_data, std::vector<int> ranks)
+{
+    ccl::kvs::address_type main_addr;
+    if (rank != 0) {
+        torch::Tensor kvs_data_cpu = kvs_data.to(torch::kCPU);
+        memcpy(main_addr.data(), kvs_data_cpu.data_ptr(), main_addr.size());
+        sub_kvs = ccl::create_kvs(main_addr);
+    }
+    c10::impl::VirtualGuardImpl impl(ds_device.type());
+    c10::Stream _stream = impl.getStreamFromGlobalPool(ds_device, /*isHighPriority=*/false);
+
+    auto q = xpu::get_queue_from_stream(_stream);
+    auto ctx = ccl::create_context(q.get_context());
+    ccl::device _device = ccl::create_device(q.get_device());
+
+    _ccl_comms.push_back(ccl::create_communicator(size, rank, _device, ctx, sub_kvs));
+
+    group_to_comm_id[ranks] = _ccl_comms.size() - 1;
 }
 
 ccl::datatype get_ccl_datatype(c10::ScalarType type)
@@ -242,7 +290,7 @@ void broadcast(torch::Tensor& data, int src, py::object group, bool async_op)
 void all_gather(std::vector<torch::Tensor>& vec_data_out, torch::Tensor& data, py::object group, bool async_op)
 {
     std::vector<size_t> recvCounts(vec_data_out.size(), data.numel());
-    std::vector<void*> recvBufs;
+    std::vector<void*> recvBufs; 
     std::transform(vec_data_out.begin(),
                    vec_data_out.end(),
                    std::back_inserter(recvBufs),
@@ -265,7 +313,7 @@ void barrier(py::object group, bool async_op)
 
 struct timeval start_t, end_t;
 
-void reduce(torch::Tensor& data, int dst, py::object op, py::object group, bool async_op)
+void reduce(torch::Tensor& data, int dst, py::object op, std::vector<int> group, bool async_op)
 {
     ccl::event ret_evt;
     CCL_KERNEL_SUBMIT(ret_evt = ccl::reduce(data.data_ptr(),
@@ -346,4 +394,6 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
     m.def("all_reduce", &all_reduce, "ccl all_reduce");
     m.def("send", &send, "ccl send");
     m.def("recv", &recv, "ccl recv");
+    m.def("initialize_sub_comm", &initialize_sub_comm, "initialize_sub_comm");
+    m.def("get_sub_kvs_addr", &get_sub_kvs_addr, "get_sub_kvs_addr");
 }
