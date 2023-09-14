@@ -64,6 +64,7 @@ ccl::communicator& _get_comm_from_group(std::vector<int> ranks)
         auto id = group_to_comm_id.find(ranks);
         return _ccl_comms[id->second];
     }
+    return _ccl_comms[0];
 }
 
 #define CCLCHECK(cmd) \
@@ -138,6 +139,10 @@ void initialize(int size, int rank, torch::Tensor& kvs_data)
     // Create ccl::communicators
     // auto ds_comms = ccl::create_communicators(size, devs_rank, ctx, kvs);
     _ccl_comms.push_back(ccl::create_communicator(size, rank, _device, ctx, kvs));
+
+    std::vector<int> ranks;
+    for(int i = 0;i < world_size;++i) ranks.push_back(i);
+    group_to_comm_id[ranks] = _ccl_comms.size() - 1;
 }
 
 /*
@@ -276,7 +281,7 @@ ccl::reduction get_ccl_reduce_op(py::object op, at::Tensor& input)
     return ccl_op;
 }
 
-void broadcast(torch::Tensor& data, int src, py::object group, bool async_op)
+void broadcast(torch::Tensor& data, int src, std::vector<int> group, bool async_op)
 {
     ccl::event ret_evt;
     CCL_KERNEL_SUBMIT(ret_evt = ccl::broadcast(data.data_ptr(),
@@ -287,7 +292,7 @@ void broadcast(torch::Tensor& data, int src, py::object group, bool async_op)
                             ds_stream), ds_stream.get_native());
 }
 
-void all_gather(std::vector<torch::Tensor>& vec_data_out, torch::Tensor& data, py::object group, bool async_op)
+void all_gather(std::vector<torch::Tensor>& vec_data_out, torch::Tensor& data, std::vector<int> group, bool async_op)
 {
     std::vector<size_t> recvCounts(vec_data_out.size(), data.numel());
     std::vector<void*> recvBufs; 
@@ -305,7 +310,7 @@ void all_gather(std::vector<torch::Tensor>& vec_data_out, torch::Tensor& data, p
                              ds_stream), ds_stream.get_native());
 }
 
-void barrier(py::object group, bool async_op)
+void barrier(std::vector<int> group, bool async_op)
 {
     ccl::event ret_evt;
     CCL_KERNEL_SUBMIT(ret_evt = ccl::barrier(_get_comm_from_group(group), ds_stream), ds_stream.get_native());
@@ -326,7 +331,7 @@ void reduce(torch::Tensor& data, int dst, py::object op, std::vector<int> group,
                          ds_stream), ds_stream.get_native());
 }
 
-void reduce_scatter(torch::Tensor& data, std::vector<torch::Tensor>& vec_data_in, py::object op, py::object group, bool async_op)
+void reduce_scatter(torch::Tensor& data, std::vector<torch::Tensor>& vec_data_in, py::object op, std::vector<int> group, bool async_op)
 {
     torch::Tensor input = vec_data_in[0];
     for(int i=1;i<vec_data_in.size();++i)
@@ -344,7 +349,7 @@ void reduce_scatter(torch::Tensor& data, std::vector<torch::Tensor>& vec_data_in
 }
 
 // TODO: implement torch's async_op behavior, document it.
-void all_reduce(torch::Tensor& data, py::object op, py::object group, bool async_op)
+void all_reduce(torch::Tensor& data, py::object op, std::vector<int> group, bool async_op)
 {
     ccl::event ret_evt;
     CCL_KERNEL_SUBMIT(ret_evt = ccl::allreduce(data.data_ptr(),
@@ -356,7 +361,7 @@ void all_reduce(torch::Tensor& data, py::object op, py::object group, bool async
                             ds_stream), ds_stream.get_native());
 }
 
-void send(torch::Tensor& data, int dst, py::object group, bool async_op)
+void send(torch::Tensor& data, int dst, std::vector<int> group, bool async_op)
 {
     ccl::event ret_evt;
     CCL_KERNEL_SUBMIT(ret_evt = ccl::send(data.data_ptr(),
@@ -367,7 +372,7 @@ void send(torch::Tensor& data, int dst, py::object group, bool async_op)
                        ds_stream), ds_stream.get_native());
 }
 
-void recv(torch::Tensor& data, int src, py::object group, bool async_op)
+void recv(torch::Tensor& data, int src, std::vector<int> group, bool async_op)
 {
     ccl::event ret_evt;
     CCL_KERNEL_SUBMIT(ret_evt = ccl::recv(data.data_ptr(),
