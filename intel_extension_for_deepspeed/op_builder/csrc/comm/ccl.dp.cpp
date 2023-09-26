@@ -383,7 +383,11 @@ void recv(torch::Tensor& data, int src, std::vector<int> group, bool async_op)
                        ds_stream), ds_stream.get_native());
 }
 
-
+std::vector<std::string> get_available_coll()
+{
+    std::vector<std::string> colls{"broadcast", "all_gather", "barrier", "reduce", "reduce_scatter", "all_reduce", "send", "recv"};
+    return colls;
+}
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
 {
@@ -401,4 +405,5 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
     m.def("recv", &recv, "ccl recv");
     m.def("initialize_sub_comm", &initialize_sub_comm, "initialize_sub_comm");
     m.def("get_sub_kvs_addr", &get_sub_kvs_addr, "get_sub_kvs_addr");
+    m.def("get_available_coll", &get_available_coll, "get_available_coll");
 }
