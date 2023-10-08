@@ -8,3 +8,5 @@ from .quantizer import QuantizerBuilder
 from .utils import UtilsBuilder
 from .async_io import AsyncIOBuilder
 from .flash_attn import FlashAttentionBuilder
+from .comm import CCLCommBuilder
+
