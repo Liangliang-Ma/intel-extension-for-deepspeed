@@ -22,13 +22,8 @@ class CCLCommBuilder(SYCLOpBuilder):
         return args
 
     def include_paths(self):
-        IPEX_CSRC= os.environ.get("IPEX_CSRC")
-        ipex_root_path = os.environ.get("IPEX_ROOT")
         return [
             sycl_kernel_include('csrc/includes'),
-            f'{IPEX_CSRC}',
-            f'{IPEX_CSRC}/gpu',
-            f'{IPEX_CSRC}/gpu/aten',
         ]
 
     def is_compatible(self, verbose=True):
@@ -45,4 +40,4 @@ class CCLCommBuilder(SYCLOpBuilder):
             )
             return []
         else:
-            return ['-lccl', f'-L{ccl_root_path}/lib', '-fsycl']
+            return ['-lccl', f'-L{ccl_root_path}/lib']

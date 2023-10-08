@@ -22,14 +22,6 @@
 #include <CL/sycl.hpp>
 #include <time.h>
 
-#include <aten/core/Device.h>
-#include <aten/core/Stream.h>
-// #include <runtime/Context.h>
-#include <runtime/Device.h>
-
-
-
-
 using namespace sycl;
 using namespace xpu;
 
@@ -132,12 +124,7 @@ void initialize(int size, int rank, torch::Tensor& kvs_data)
     auto ctx = ccl::create_context(q.get_context());
     ccl::device _device = ccl::create_device(q.get_device());
 
-    ccl::vector_class<ccl::pair_class<int, cl::sycl::device>> devs_rank;
-    auto sycl_dev = xpu::dpcpp::dpcppGetRawDevice(ds_device.index());
-    devs_rank.emplace_back(rank, sycl_dev);
-
     // Create ccl::communicators
-    // auto ds_comms = ccl::create_communicators(size, devs_rank, ctx, kvs);
     _ccl_comms.push_back(ccl::create_communicator(size, rank, _device, ctx, kvs));
 
     std::vector<int> ranks;
