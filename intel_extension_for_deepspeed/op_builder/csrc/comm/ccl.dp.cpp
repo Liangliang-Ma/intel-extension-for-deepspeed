@@ -114,7 +114,7 @@ void initialize(int size, int rank, torch::Tensor& kvs_data)
         kvs = ccl::create_kvs(main_addr);
     }
     
-    ds_device = "xpu:" + std::to_string(rank);
+    ds_device = "xpu:" + std::to_string(rank % ls);
     ds_stream = init_stream(ds_device);
     
     c10::impl::VirtualGuardImpl impl(ds_device.type());
@@ -348,7 +348,7 @@ void all_reduce(torch::Tensor& data, py::object op, std::vector<int> group, bool
                             ds_stream), ds_stream.get_native());
 }
 
-void send(torch::Tensor& data, int dst, std::vector<int> group, bool async_op)
+void send(torch::Tensor& data, int dst, std::vector<int> group, int tag)
 {
     ccl::event ret_evt;
     CCL_KERNEL_SUBMIT(ret_evt = ccl::send(data.data_ptr(),
@@ -359,7 +359,7 @@ void send(torch::Tensor& data, int dst, std::vector<int> group, bool async_op)
                        ds_stream), ds_stream.get_native());
 }
 
-void recv(torch::Tensor& data, int src, std::vector<int> group, bool async_op)
+void recv(torch::Tensor& data, int src, std::vector<int> group, int tag)
 {
     ccl::event ret_evt;
     CCL_KERNEL_SUBMIT(ret_evt = ccl::recv(data.data_ptr(),
