@@ -13,6 +13,15 @@ class XPU_Accelerator(DeepSpeedAccelerator):
     def is_synchronized_device(self):
         return False
 
+    def use_host_timers(self):
+        return self.is_synchronized_device()
+
+    def resolves_data_dependency(self):
+        return self.is_synchronized_device()
+
+    def handles_memory_backpressure(self):
+        return self.is_synchronized_device()
+
     # Device APIs
     def device_name(self, device_index=None):
         if device_index == None:
@@ -147,6 +156,17 @@ class XPU_Accelerator(DeepSpeedAccelerator):
     def is_triton_supported(self):
         return False
 
+    # Graph operations
+    def create_graph(self):
+        return None
+
+    def capture_to_graph(self, graph, pool=None, stream=None):
+        from deepspeed.runtime.utils import noop_context
+        return noop_context()
+
+    def replay_graph(self, graph):
+        return
+
     def available_memory(self, device_index=None):
         return self.total_memory(device_index) - self.memory_allocated(device_index)
 
@@ -220,7 +240,7 @@ class XPU_Accelerator(DeepSpeedAccelerator):
         else:
             return False
 
-    # create an instance of op builder and return, name specified by class_name 
+    # create an instance of op builder and return, name specified by class_name
     def create_op_builder(self, op_name):
         builder_class = self.get_op_builder(op_name)
         if builder_class != None:
@@ -229,7 +249,7 @@ class XPU_Accelerator(DeepSpeedAccelerator):
 
     # return an op builder class, name specified by class_name
     def get_op_builder(self, class_name):
-        from intel_extension_for_deepspeed.op_builder import CPUAdagradBuilder, CPUAdamBuilder, FusedAdamBuilder, QuantizerBuilder, TransformerBuilder, UtilsBuilder, InferenceBuilder, FlashAttentionBuilder, AsyncIOBuilder
+        from intel_extension_for_deepspeed.op_builder import CPUAdagradBuilder, CPUAdamBuilder, FusedAdamBuilder, QuantizerBuilder, UtilsBuilder, InferenceBuilder, FlashAttentionBuilder, AsyncIOBuilder
         from deepspeed.ops.op_builder.sparse_attn import SparseAttnBuilder
 
         if class_name == "AsyncIOBuilder":
@@ -244,8 +264,6 @@ class XPU_Accelerator(DeepSpeedAccelerator):
             return QuantizerBuilder
         elif class_name == "SparseAttnBuilder":
             return SparseAttnBuilder
-        elif class_name == "TransformerBuilder":
-            return TransformerBuilder
         elif class_name == "UtilsBuilder":
             return UtilsBuilder
         elif class_name == "InferenceBuilder":
@@ -261,3 +279,6 @@ class XPU_Accelerator(DeepSpeedAccelerator):
         except ImportError:
             from intel_extension_for_pytorch.xpu.utils import DpcppBuildExtension
         return DpcppBuildExtension
+
+    def export_envs(self):
+        return []
